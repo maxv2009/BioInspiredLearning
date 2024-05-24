@@ -9,5 +9,4 @@ while not episode_over:
     observation, reward, terminated, truncated, info = env.step(action)
 
     episode_over = terminated or truncated
-
 env.close()
