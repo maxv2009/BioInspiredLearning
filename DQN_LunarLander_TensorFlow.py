@@ -8,8 +8,8 @@ from collections import deque
 # Create the model
 def create_model(state_dim, action_dim, learning_rate):
     model = tf.keras.models.Sequential([
-        layers.Dense(64, activation='relu', input_shape=(state_dim,)),
-        layers.Dense(64, activation='relu'),
+        layers.Dense(256, activation='relu', input_shape=(state_dim,)),
+        layers.Dense(256, activation='relu'),
         layers.Dense(action_dim)
     ])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate), loss='mse')

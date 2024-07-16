@@ -1,28 +1,40 @@
 import gymnasium as gym
-from plot_creation import *
+from plot_creation import save_lists, plot_rewards, plot_multiple_rewards
+from pathlib import Path
+import os
+
+# Choose whether you want to load an existing agent or train one
+train_or_play = "play"
 
 # Choose between tensorflow and pytorch
 chosen_framework = "pytorch"
 
+# Path to the saved agent in case an existing agent is to be used
+model_path = "epsilon_decay_0.999_epsilon_min_0.01_learning_rate_0.0005/dqn_lunarlander_final_episode_572.h5"
+
 # Training hyperparameters
-num_episodes = 2000
+num_episodes = 1000
 
 # Model hyperparameters
 gamma = 0.99
 epsilon = 1.0
-epsilon_decay = 0.995
-epsilon_min = 0.01
-batch_size = 128
-learning_rate = 0.001
-buffer_size = 200000
+epsilon_decay_list = [0.999, 0.995, 0.99]
+epsilon_min_list = [0.005, 0.01, 0.05]
+batch_size = 64
+learning_rate_list = [0.001, 0.0005, 0.005]
+buffer_size = 1000000
 
-# Load the lunar lander environment
-env = gym.make('LunarLander-v2', render_mode="human")
+# Load the lunar lander environment with or without rendering
+if train_or_play == "train":
+    env = gym.make('LunarLander-v2')
+else:
+    env = gym.make('LunarLander-v2' , render_mode='human')
 
 # Dimensions of the state space and action space
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.n
 
+# Choose between TensorFlow or PyTorch implementation
 if chosen_framework == "tensorflow":
     from DQN_LunarLander_TensorFlow import *
     print("Using TensorFlow")
@@ -30,52 +42,145 @@ else:
     from DQN_LunarLander_PyTorch import *
     print("Using PyTorch")
 
-# Create a replay buffer
-replay_buffer = ReplayBuffer(buffer_size)
+# Lists to store rewards and episodes for plotting
+all_rewards = []
+all_episodes = []
+all_names = []
 
-# Initialize the DQN agent
-agent = DQN_Agent(state_dim, action_dim, replay_buffer, gamma, epsilon, epsilon_decay,
-                  epsilon_min, batch_size, learning_rate)
+# Train
+if train_or_play == "train":
+    for learning_rate in learning_rate_list:
+        for epsilon_min in epsilon_min_list:
+            for epsilon_decay in epsilon_decay_list:
+                # Create a replay buffer
+                replay_buffer = ReplayBuffer(buffer_size)
 
-reward_progress = []
-episodes = []
+                foldername = (f"epsilon_decay_{epsilon_decay}_epsilon_min"
+                                f"_{epsilon_min}_learning_rate_{learning_rate}")
+                Path(os.getcwd(), foldername).mkdir(parents=True, exist_ok=True)
 
-# Train the agent
-for episode in range(num_episodes):
-    state, _ = env.reset()
-    total_reward = 0
+                # Initialize the DQN agent
+                agent = DQN_Agent(state_dim, action_dim, replay_buffer, gamma, epsilon, epsilon_decay,
+                                  epsilon_min, batch_size, learning_rate)
 
-    for t in range(1000):
-        action = agent.select_action(state)
-        next_state, reward, done, _, _ = env.step(action)
-        experience = (state, action, reward, next_state, done)
-        replay_buffer.add(experience)
-        state = next_state
-        total_reward += reward
+                reward_progress = []
+                episodes = []
 
-        agent.train()
+                # Train the agent
+                for episode in range(num_episodes):
+                    state, _ = env.reset()
+                    total_reward = 0
 
-        if done:
-            break
+                    # Run an episode with up to 1000 timesteps. After 1000 timesteps the episode is aborted.
+                    for t in range(1000):
+                        # Select an action (epsilon-greedy policy)
+                        action = agent.select_action(state)
+                        # Take a step
+                        next_state, reward, done, _, _ = env.step(action)
+                        # Add the experience to the replay buffer
+                        experience = (state, action, reward, next_state, done)
+                        replay_buffer.add(experience)
+                        # Update the current state to the next state
+                        state = next_state
+                        # Update the total reward
+                        total_reward += reward
 
-    print(f"Episode: {episode + 1}, Total Reward: {total_reward}")
+                        # Train the agent
+                        agent.train()
 
-    reward_progress.append(total_reward)
-    episodes.append(episode)
+                        if done:
+                            break
 
-    plot_rewards(episodes, reward_progress)
+                    print(f"Episode: {episode + 1}, Total Reward: {total_reward}")
+
+                    # Save the rewards for plotting
+                    reward_progress.append(total_reward)
+                    episodes.append(episode)
+
+                    # Plot results every 25 episodes
+                    if (episode + 1) % 25 == 0:
+                        plot_rewards(episodes, reward_progress, train_or_play, gamma, epsilon,
+                                     epsilon_decay, epsilon_min, batch_size, learning_rate,
+                                     buffer_size)
+
+                    # Save model every 100 episodes
+                    if (episode + 1) % 100 == 0:
+                        agent.save_model(f".\\{foldername}\\dqn_lunarlander_episode_{episode + 1}.h5")
+
+                    if not len(reward_progress) < 200:
+                        last_200_entries = reward_progress[-200:]
+                        last_50_entries = reward_progress[-50:]
+                        average = sum(last_200_entries) / 200
+                        minimum = min(last_50_entries)
+                        if average >= 240: #minimum >= 175 and
+                            print(f"Solved in {episode + 1} episodes!")
+                            break
+
+                all_rewards.append(reward_progress)
+                all_episodes.append(episodes)
+                all_names.append("Epsilon Decay: " + str(epsilon_decay) + " Epsilon min.: " + str(
+                    epsilon_min) + " Learning Rate: " + str(learning_rate))
+
+                # Save plot
+                plot_rewards(episodes, reward_progress, train_or_play, gamma, epsilon,
+                             epsilon_decay,
+                             epsilon_min,
+                             batch_size, learning_rate, buffer_size, save=True,
+                             foldername=foldername)
+
+                # Save the final model
+                agent.save_model(f".\\{foldername}\\dqn_lunarlander_final_episode_{episode}.h5")
+
+        foldername = "Plot all hyperparameters"
+        Path(os.getcwd(), foldername).mkdir(parents=True, exist_ok=True)
+
+        # Plot all results
+        plot_multiple_rewards(all_rewards, all_episodes, all_names, foldername, learning_rate)
+        save_lists(f".\\{foldername}\\all_lists_lr_{learning_rate}.pkl", (all_rewards,
+                                                                          all_episodes, all_names))
+        all_rewards = []
+        all_episodes = []
+        all_names = []
 
 
-    # Save the model every 25 episodes
-    if (episode + 1) % 25 == 0:
-        agent.save_model(f".\\save\\run_2_dqn_lunarlander_episode_{episode + 1}.h5")
+else:
+    # Create a replay buffer
+    replay_buffer = ReplayBuffer(buffer_size)
+    # Set epsilon to zero so no exploration is performed
+    epsilon = 0
+    agent = DQN_Agent(state_dim, action_dim, replay_buffer, gamma, epsilon,  epsilon_decay_list[
+        0], epsilon_min_list[0], batch_size, learning_rate_list[0])
+    agent.load_model(f".\\{model_path}")
+    reward_progress = []
+    episodes = []
 
-# Save plot
-plot_save()
+    # Train the agent
+    for episode in range(num_episodes):
+        state, _ = env.reset()
+        total_reward = 0
 
-# Save the final model
-agent.save_model("dqn_lunarlander_final.h5")
+        # Run an episode with up to 1000 timesteps. After 1000 timesteps the episode is aborted.
+        for t in range(1000):
+            # Select an action (epsilon-greedy policy)
+            action = agent.select_action(state)
+            # Take a step
+            next_state, reward, done, _, _ = env.step(action)
+            # Update the current state to the next state
+            state = next_state
+            # Update the total reward
+            total_reward += reward
 
+            if done:
+                break
 
+        print(f"Episode: {episode + 1}, Total Reward: {total_reward}")
 
+        # Save the rewards for plotting
+        reward_progress.append(total_reward)
+        episodes.append(episode)
 
+        # Plot results every 5 episodes
+        if (episode + 1) % 100 == 0:
+            plot_rewards(episodes, reward_progress, train_or_play)
+
+    plot_rewards(episodes, reward_progress, train_or_play, save=True, foldername="play")
