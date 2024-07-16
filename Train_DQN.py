@@ -109,10 +109,8 @@ if train_or_play == "train":
 
                     if not len(reward_progress) < 200:
                         last_200_entries = reward_progress[-200:]
-                        last_50_entries = reward_progress[-50:]
                         average = sum(last_200_entries) / 200
-                        minimum = min(last_50_entries)
-                        if average >= 240: #minimum >= 175 and
+                        if average >= 240:
                             print(f"Solved in {episode + 1} episodes!")
                             break
 
