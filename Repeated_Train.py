@@ -19,9 +19,9 @@ num_episodes = 1000
 gamma = 0.99
 epsilon = 1.0
 epsilon_decay_list = [0.999]
-epsilon_min_list = [0.01]
+epsilon_min_list = [0.01, 0.005]
 batch_size = 64
-learning_rate_list = [0.0005]
+learning_rate_list = [0.0005, 0.001]
 buffer_size = 1000000
 
 # Load the lunar lander environment with or without rendering
